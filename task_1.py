@@ -1,5 +1,5 @@
 import hashlib
-from typing import Iterable, Any, Dict
+from typing import Any, Dict, Iterable
 
 
 class BloomFilter:
@@ -12,16 +12,9 @@ class BloomFilter:
 
         self.size = size
         self.num_hashes = num_hashes
-
-        # Compact bit array: 8 bits per byte
         self.bit_array = bytearray((size + 7) // 8)
 
     def _hashes(self, item: str):
-        """
-        Generates positions in the Bloom filter.
-        The password itself is accepted as a normal string.
-        Hashing is used internally by the Bloom filter.
-        """
         if not isinstance(item, str):
             raise TypeError("Item must be a string")
 
@@ -42,7 +35,6 @@ class BloomFilter:
     def _set_bit(self, position: int):
         byte_index = position // 8
         bit_index = position % 8
-
         self.bit_array[byte_index] |= 1 << bit_index
 
     def _get_bit(self, position: int) -> bool:
@@ -70,12 +62,13 @@ class BloomFilter:
 def check_password_uniqueness(
     bloom_filter: BloomFilter,
     passwords: Iterable[Any]
-) -> Dict[str, str]:
+) -> Dict[Any, str]:
     """
-    Checks passwords using the provided Bloom filter.
+    Перевіряє список паролів на унікальність.
 
-    New unique passwords are also added to the filter,
-    so duplicates inside the same input list are detected.
+    Некоректні значення (None, числа, порожні рядки)
+    безпечно позначаються як некоректні й не передаються
+    до Bloom Filter.
     """
 
     if not isinstance(bloom_filter, BloomFilter):
@@ -83,20 +76,30 @@ def check_password_uniqueness(
             "bloom_filter must be an instance of BloomFilter"
         )
 
-    if isinstance(passwords, (str, bytes)) or not hasattr(
-        passwords, "__iter__"
-    ):
-        raise TypeError("passwords must be an iterable")
+    if isinstance(passwords, (str, bytes)):
+        raise TypeError(
+            "passwords must be an iterable of password values"
+        )
+
+    try:
+        iterator = iter(passwords)
+    except TypeError as exc:
+        raise TypeError(
+            "passwords must be an iterable"
+        ) from exc
 
     results = {}
 
-    for password in passwords:
-        # Incorrect type
-        if not isinstance(password, str):
-            results[repr(password)] = "некоректний пароль"
+    for password in iterator:
+        # Validation requested by mentor
+        if password is None:
+            results[password] = "некоректний пароль"
             continue
 
-        # Empty password
+        if not isinstance(password, str):
+            results[password] = "некоректний пароль"
+            continue
+
         if password == "":
             results[password] = "некоректний пароль"
             continue
@@ -105,18 +108,13 @@ def check_password_uniqueness(
             results[password] = "вже використаний"
         else:
             results[password] = "унікальний"
-
-            # Remember the newly accepted password
             bloom_filter.add(password)
 
     return results
 
 
 if __name__ == "__main__":
-    bloom = BloomFilter(
-        size=1000,
-        num_hashes=3
-    )
+    bloom = BloomFilter(size=1000, num_hashes=3)
 
     existing_passwords = [
         "password123",
@@ -127,6 +125,7 @@ if __name__ == "__main__":
     for password in existing_passwords:
         bloom.add(password)
 
+    # Основний приклад із завдання
     new_passwords_to_check = [
         "password123",
         "newpassword",
@@ -141,3 +140,21 @@ if __name__ == "__main__":
 
     for password, status in results.items():
         print(f"Пароль '{password}' — {status}.")
+
+    # Додаткова перевірка валідації
+    print("\nПеревірка некоректних значень:")
+
+    invalid_passwords = [
+        None,
+        12345,
+        "",
+        "another_password"
+    ]
+
+    validation_results = check_password_uniqueness(
+        bloom,
+        invalid_passwords
+    )
+
+    for password, status in validation_results.items():
+        print(f"Пароль {repr(password)} — {status}.")
